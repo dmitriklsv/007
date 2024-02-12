@@ -1,0 +1,1 @@
+export const ACCESS_TOKEN_EXPIRED_DURATION = "3d";

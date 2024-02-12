@@ -1,0 +1,89 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  adddress String @id @db.VarChar
+  nfts     Nft[]
+
+  @@map("user")
+}
+
+model Collection {
+  address     String  @id @db.VarChar
+  name        String  @db.VarChar
+  slug        String  @db.VarChar
+  symbol      String  @db.VarChar
+  image       String  @db.VarChar
+  banner      String? @db.VarChar
+  description String? @db.VarChar
+
+  nfts Nft[]
+
+  @@map("collection")
+}
+
+model Nft {
+  id               Int           @id @default(autoincrement())
+  contract_address String        @db.VarChar
+  token_id         String        @db.VarChar
+  name             String        @db.VarChar
+  description      String?       @db.VarChar
+  symbol           String        @db.VarChar
+  owner_address    String        @db.VarChar
+  price            Decimal
+  owner            User          @relation(fields: [owner_address], references: [adddress])
+  collection       Collection    @relation(fields: [contract_address], references: [address])
+  activities       NftActivity[]
+  traits           NftTrait[]
+  transactions     Transaction[]
+
+  @@map("nft")
+}
+
+model NftActivity {
+  id         Int             @id @default(autoincrement())
+  event_kind NftActivityKind
+  metadata   Json
+  nft_id     Int
+  nft        Nft             @relation(fields: [nft_id], references: [id])
+
+  @@map("nft_activity")
+}
+
+model NftTrait {
+  id        Int    @id @default(autoincrement())
+  attribute String @db.VarChar
+  value     String @db.VarChar
+  nft_id    Int
+  nft       Nft    @relation(fields: [nft_id], references: [id])
+
+  @@map("nft_trait")
+}
+
+model Transaction {
+  id     Int      @id @default(autoincrement())
+  date   DateTime @db.Timestamptz(3)
+  volume Decimal
+  nft_id Int
+  type   String   @db.VarChar
+  onNft  Nft      @relation(fields: [nft_id], references: [id])
+
+  @@map("transaction")
+}
+
+enum NftActivityKind {
+  list
+  sale
+  withdrawn
+
+  @@map("nft_activity_kind")
+}
