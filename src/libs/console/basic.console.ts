@@ -8,9 +8,5 @@ export class BasicConsole extends CommandRunner {
     super();
   }
 
-  async run(): Promise<void> {
-    await new Promise(res => setTimeout(res, 1000));
-
-    console.log("hello kitty");
-  }
+  async run(): Promise<void> {}
 }

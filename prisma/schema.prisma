@@ -2,7 +2,8 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["views"]
 }
 
 datasource db {
@@ -11,8 +12,8 @@ datasource db {
 }
 
 model User {
-  adddress String @id @db.VarChar
-  nfts     Nft[]
+  address String @id @db.VarChar
+  nfts    Nft[]
 
   @@map("user")
 }
@@ -20,9 +21,8 @@ model User {
 model Collection {
   address     String  @id @db.VarChar
   name        String  @db.VarChar
-  slug        String  @db.VarChar
   symbol      String  @db.VarChar
-  image       String  @db.VarChar
+  image       String? @db.VarChar
   banner      String? @db.VarChar
   description String? @db.VarChar
 
@@ -36,16 +36,17 @@ model Nft {
   contract_address String        @db.VarChar
   token_id         String        @db.VarChar
   name             String        @db.VarChar
-  description      String?       @db.VarChar
-  symbol           String        @db.VarChar
   owner_address    String        @db.VarChar
-  price            Decimal
-  owner            User          @relation(fields: [owner_address], references: [adddress])
+  image            String?       @db.VarChar
+  description      String?       @db.VarChar
+  price            Decimal?
+  owner            User          @relation(fields: [owner_address], references: [address])
   collection       Collection    @relation(fields: [contract_address], references: [address])
   activities       NftActivity[]
   traits           NftTrait[]
   transactions     Transaction[]
 
+@@unique([contract_address,token_id])
   @@map("nft")
 }
 
@@ -60,11 +61,12 @@ model NftActivity {
 }
 
 model NftTrait {
-  id        Int    @id @default(autoincrement())
-  attribute String @db.VarChar
-  value     String @db.VarChar
-  nft_id    Int
-  nft       Nft    @relation(fields: [nft_id], references: [id])
+  id           Int     @id @default(autoincrement())
+  attribute    String  @db.VarChar
+  value        String  @db.VarChar
+  display_type String? @db.VarChar
+  nft_id       Int
+  nft          Nft     @relation(fields: [nft_id], references: [id])
 
   @@map("nft_trait")
 }
@@ -78,6 +80,24 @@ model Transaction {
   onNft  Nft      @relation(fields: [nft_id], references: [id])
 
   @@map("transaction")
+}
+
+view CollectionView {
+  address       String  @id
+  name          String
+  slug          String
+  symbol        String
+  image         String
+  banner        String?
+  description   String?
+  supply        Int
+  volume        Decimal
+  floor_price   Decimal
+  volume_of_1h  Decimal
+  volume_of_24h Decimal
+  volume_of_7d  Decimal
+
+  @@map("collection_view")
 }
 
 enum NftActivityKind {

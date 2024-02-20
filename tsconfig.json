@@ -19,7 +19,7 @@
     "typeRoots": ["node_modules/@types"],
     "paths": {
       "@root/*": ["src/*"],
-      "@test/*": ["test/*"],
+      "@test/*": ["test/*"]
     },
     //type checking
     "strict": true,
@@ -40,9 +40,9 @@
     "strictNullChecks": true,
     "strictPropertyInitialization": false,
     "skipLibCheck": true,
-    "useUnknownInCatchVariables": true,
+    "useUnknownInCatchVariables": true
   },
   "ts-node": {
-    "require": ["tsconfig-paths/register"],
-  },
+    "require": ["tsconfig-paths/register"]
+  }
 }
