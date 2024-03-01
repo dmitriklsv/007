@@ -1,58 +1,40 @@
-import { z } from "zod";
+import type { ApiPropertyOptions } from "@nestjs/swagger";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Transform, Type } from "class-transformer";
+import { IsBoolean, IsInt, IsOptional, Max, Min } from "class-validator";
 
-export const optionalBoolString = () =>
-  z
-    .enum(["true", "false"])
-    .optional()
-    .transform(s => (s ? s === "true" : undefined));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function IsBool(target: any, propertyKey: string | symbol) {
+  Transform(({ value }) => {
+    return [true, "enabled", "true"].indexOf(value) > -1;
+  })(target, propertyKey);
+  IsBoolean()(target, propertyKey);
+}
 
-export const numberString = () => z.string().transform(Number).pipe(z.number());
+export function OptionalProperty(
+  options?: ApiPropertyOptions
+): PropertyDecorator {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (target: any, propertyKey: string | symbol) => {
+    ApiPropertyOptional(options)(target, propertyKey);
+    IsOptional()(target, propertyKey);
+  };
+}
 
-export const optionalNumberString = () =>
-  z
-    .string()
-    .optional()
-    .transform(val => (val ? Number(val) : val))
-    .pipe(z.number().optional());
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function IsInteger(target: any, propertyKey: string | symbol) {
+  Type(() => Number)(target, propertyKey);
+  IsInt()(target, propertyKey);
+}
 
-export const stringDate = () =>
-  z
-    .string()
-    .transform(stringDate => new Date(stringDate))
-    .pipe(z.date());
+export class PaginatedQuery {
+  @OptionalProperty({ example: 1 })
+  @IsInteger
+  @Min(1)
+  page: number = 1;
 
-export const dateStringWithTimezone = () =>
-  z
-    .string()
-    .regex(
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/,
-      { message: "Date string must have timezone" }
-    )
-    .transform(s => new Date(s))
-    .pipe(z.date());
-
-// Form data multipart use cases
-export const nonEmptyStringOrUndefined = () =>
-  z
-    .string()
-    .optional()
-    .transform(s => s || undefined);
-
-export const paginatedParamsSchema = () =>
-  z.object({
-    page: z
-      .string()
-      .optional()
-      .default("1")
-      .transform(Number)
-      .pipe(z.number().int().min(1)),
-    take: z
-      .string()
-      .optional()
-      .default("60")
-      .transform(Number)
-      .pipe(z.number().int().positive().max(300))
-  });
-
-export const nftTokenId = () =>
-  z.union([z.string(), z.number()]).transform(String);
+  @OptionalProperty({ example: 60 })
+  @IsInteger
+  @Max(300)
+  take: number = 60;
+}

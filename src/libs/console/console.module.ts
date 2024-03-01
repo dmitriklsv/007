@@ -2,7 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 
 import { PrismaModule } from "../prisma/prisma.module";
-import { BasicConsole } from "./basic.console";
+import { StreamConsole } from "./stream.console";
 
 @Module({
   imports: [
@@ -11,6 +11,6 @@ import { BasicConsole } from "./basic.console";
     }),
     PrismaModule
   ],
-  providers: [BasicConsole]
+  providers: [StreamConsole]
 })
 export class ConsoleModule {}

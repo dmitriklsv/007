@@ -12,50 +12,74 @@ datasource db {
 }
 
 model User {
-  address String @id @db.VarChar
-  nfts    Nft[]
+  address          String            @id @db.VarChar
+  ListedNfts       ListingNft[] // only listed nfts on mrkt marketplace, not mean owned nfts
+  CollectionOffers CollectionOffer[]
 
   @@map("user")
 }
 
 model Collection {
-  address     String  @id @db.VarChar
-  name        String  @db.VarChar
-  symbol      String  @db.VarChar
-  image       String? @db.VarChar
-  banner      String? @db.VarChar
-  description String? @db.VarChar
-
-  nfts Nft[]
+  address      String        @id @db.VarChar
+  name         String        @db.VarChar
+  symbol       String        @db.VarChar
+  image        String?       @db.VarChar
+  banner       String?       @db.VarChar
+  description  String?       @db.VarChar
+  Nfts         Nft[]
+  Transactions Transaction[]
 
   @@map("collection")
 }
 
 model Nft {
-  id               Int           @id @default(autoincrement())
-  contract_address String        @db.VarChar
-  token_id         String        @db.VarChar
-  name             String        @db.VarChar
-  owner_address    String        @db.VarChar
-  image            String?       @db.VarChar
-  description      String?       @db.VarChar
-  price            Decimal?
-  owner            User          @relation(fields: [owner_address], references: [address])
-  collection       Collection    @relation(fields: [contract_address], references: [address])
-  activities       NftActivity[]
-  traits           NftTrait[]
-  transactions     Transaction[]
+  id            Int           @id @default(autoincrement())
+  token_address String        @db.VarChar
+  token_id      String        @db.VarChar
+  name          String        @db.VarChar
+  token_uri     String        @db.VarChar
+  image         String?       @db.VarChar
+  description   String?       @db.VarChar
+  Collection    Collection    @relation(fields: [token_address], references: [address])
+  Activities    NftActivity[]
+  Traits        NftTrait[]
+  Offers        NftOffer[]
+  Listing       ListingNft?
 
-@@unique([contract_address,token_id])
+  @@unique([token_address, token_id])
   @@map("nft")
 }
 
+model ListingNft {
+  tx_hash                   String       @id @db.VarChar
+  created_date              DateTime     @default(now()) @db.Timestamptz(3)
+  nft_id                    Int          @unique
+  collection_address        String       @db.VarChar
+  sale_type                 SaleType
+  seller_address            String       @db.VarChar
+  price                     Decimal
+  start_date                DateTime?    @db.Timestamptz(3) // available when sale_type is auction
+  end_date                  DateTime?    @db.Timestamptz(3) // available when sale_type is auction
+  min_bid_increment_percent Decimal? // available when sale_type is auction
+  denom                     String       @db.VarChar
+  Seller                    User         @relation(fields: [seller_address], references: [address])
+  Nft                       Nft          @relation(fields: [nft_id], references: [id])
+  Biddings                  NftBidding[]
+
+  @@map("listing_nft")
+}
+
 model NftActivity {
-  id         Int             @id @default(autoincrement())
-  event_kind NftActivityKind
-  metadata   Json
-  nft_id     Int
-  nft        Nft             @relation(fields: [nft_id], references: [id])
+  tx_hash        String          @id @db.VarChar
+  seller_address String?         @db.VarChar
+  buyer_address  String?         @db.VarChar
+  date           DateTime        @default(now()) @db.Timestamptz(3)
+  price          Decimal
+  denom          String          @db.VarChar
+  event_kind     NftActivityKind
+  metadata       Json
+  nft_id         Int
+  Nft            Nft             @relation(fields: [nft_id], references: [id])
 
   @@map("nft_activity")
 }
@@ -66,20 +90,80 @@ model NftTrait {
   value        String  @db.VarChar
   display_type String? @db.VarChar
   nft_id       Int
-  nft          Nft     @relation(fields: [nft_id], references: [id])
+  Nft          Nft     @relation(fields: [nft_id], references: [id])
 
   @@map("nft_trait")
 }
 
-model Transaction {
-  id     Int      @id @default(autoincrement())
-  date   DateTime @db.Timestamptz(3)
-  volume Decimal
-  nft_id Int
-  type   String   @db.VarChar
-  onNft  Nft      @relation(fields: [nft_id], references: [id])
+model CollectionOffer {
+  tx_hash            String      @id @db.VarChar
+  created_date       DateTime    @default(now()) @db.Timestamptz(3)
+  buyer_address      String      @db.VarChar
+  collection_address String      @db.VarChar
+  price              Decimal
+  denom              String      @default("usei")
+  quantity           Int
+  current_quantity   Int         @default(0)
+  start_date         DateTime    @db.Timestamptz(3)
+  end_date           DateTime    @db.Timestamptz(3)
+  status             OfferStatus @default(pending)
+  Buyer              User        @relation(fields: [buyer_address], references: [address])
 
+  @@unique([collection_address, buyer_address])
+  @@map("collection_offer")
+}
+
+model NftOffer {
+  tx_hash       String      @id @db.VarChar
+  created_date  DateTime    @default(now()) @db.Timestamptz(3)
+  nft_id        Int
+  price         Decimal
+  denom         String      @default("usei")
+  buyer_address String      @db.VarChar
+  start_date    DateTime    @db.Timestamptz(3)
+  end_date      DateTime    @db.Timestamptz(3)
+  status        OfferStatus @default(pending)
+  Nft           Nft         @relation(fields: [nft_id], references: [id])
+
+  @@unique([nft_id, buyer_address])
+  @@map("nft_offer")
+}
+
+model NftBidding {
+  tx_hash       String     @id @db.VarChar
+  listing_hash  String     @db.VarChar
+  created_date  DateTime   @default(now()) @db.Timestamptz(3)
+  buyer_address String     @db.VarChar
+  price         Decimal
+  denom         String     @db.VarChar
+  Listing       ListingNft @relation(fields: [listing_hash], references: [tx_hash])
+
+  @@map("nft_bidding")
+}
+
+//repersentthe transfering transactions (fixed_sell, accept_sale, accept_offer, bidding)
+model Transaction {
+  txn_hash           String     @id @db.VarChar
+  date               DateTime   @db.Timestamptz(3)
+  volume             Decimal
+  collection_address String     @db.VarChar
+  buyer_address      String     @db.VarChar
+  seller_address     String     @db.VarChar
+  Collection         Collection @relation(fields: [collection_address], references: [address])
+
+  @@index([collection_address])
+  @@index([collection_address, date])
   @@map("transaction")
+}
+
+model Block {
+  txn_hash String   @id @db.VarChar
+  date     DateTime @db.Timestamptz(3)
+  height   String   @db.VarChar
+  sender   String   @db.VarChar
+  action   String   @db.VarChar
+
+  @@map("block")
 }
 
 view CollectionView {
@@ -102,8 +186,25 @@ view CollectionView {
 
 enum NftActivityKind {
   list
+  delist
   sale
   withdrawn
+  make_offer
+  cancel_offer
 
   @@map("nft_activity_kind")
+}
+
+enum SaleType {
+  fixed
+  auction
+
+  @@map("sale_type")
+}
+
+enum OfferStatus {
+  pending
+  done
+
+  @@map("offer_status")
 }

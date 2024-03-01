@@ -1,7 +1,7 @@
 import type { CosmWasmClient } from "@cosmjs/cosmwasm-stargate";
 
 type NftInfo = {
-  token_uri: string | null;
+  token_uri: string;
 };
 
 export const getNftInfo = (

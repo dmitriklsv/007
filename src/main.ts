@@ -1,17 +1,15 @@
-import { ZodValidationPipe } from "@anatine/zod-nestjs";
-import { patchNestjsSwagger } from "@anatine/zod-nestjs";
+import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 
-import { AppModule } from "./app.module";
+import { AppModule } from "./modules/app/app.module";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableCors();
-  app.useGlobalPipes(new ZodValidationPipe());
+  app.useGlobalPipes(new ValidationPipe({ transform: true }));
 
-  patchNestjsSwagger();
   const document = SwaggerModule.createDocument(
     app,
     new DocumentBuilder()
