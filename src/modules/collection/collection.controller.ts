@@ -1,9 +1,11 @@
-import { Controller, Get, Param, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 
 import { CollectionService } from "./collection.service";
-import { GetCollectionOffersQuery } from "./parsers/get-collection-offers.parser";
-import { GetHighestCollectionOfferForOwnedNftAddress } from "./parsers/get-highest-offer.parser";
+import { CreateCollectionPayload } from "./parsers/create-collection";
+import { GetCollectionOffersQuery } from "./parsers/get-collection-offers";
+import { GetHighestCollectionOfferForOwnedNftAddressQuery } from "./parsers/get-highest-offer";
+import { GetListedNftsByCollectionQuery } from "./parsers/get-listed-nfts-by-collection";
 
 @Controller("collections")
 @ApiTags("collections")
@@ -24,11 +26,27 @@ export class CollectionController {
   @Get(":collection_address/highest_offer")
   getHighestOfferForSeller(
     @Param("collection_address") collectionAddress: string,
-    @Query() query: GetHighestCollectionOfferForOwnedNftAddress
+    @Query() query: GetHighestCollectionOfferForOwnedNftAddressQuery
   ) {
     return this.collectionService.getHighestCollectionOfferForOwnedNftAddress(
       collectionAddress,
       query
     );
+  }
+
+  @Get(":collection_address/listed-nfts")
+  getListedNftOnACollection(
+    @Param("collection_address") collectionAddress: string,
+    @Query() query: GetListedNftsByCollectionQuery
+  ) {
+    return this.collectionService.getPagedListedNftsByCollectionAddress(
+      collectionAddress,
+      query
+    );
+  }
+
+  @Post()
+  createCollection(@Body() body: CreateCollectionPayload) {
+    return this.collectionService.createCollection(body.collectionAddress);
   }
 }

@@ -50,33 +50,35 @@ export class PrismaService
         CREATE OR REPLACE VIEW "collection_view" AS
         SELECT 
             "c".*,
-            count("l"."tx_hash") "supply",
-            min("l"."price") "floor_price",
+            coalesce(count("n"."id"),0) "supply",
+            coalesce(count("l"."id"),0) "listed",
+            coalesce(min("l"."price"),0) "floor_price",
             (
-                SELECT sum("t"."volume")
+                SELECT coalesce(sum("t"."volume"),0)
                 FROM "transaction" "t"
                 WHERE "t"."collection_address" = "c"."address"
             ) "volume",
             (
-                SELECT sum("t"."volume")
+                SELECT coalesce(sum("t"."volume"),0)
                 FROM "transaction" "t"
                 WHERE "t"."collection_address" = "c"."address"
                 AND "t"."date" > NOW() - INTERVAL '1 hour'
             ) "volume_of_1h",
             (
-                SELECT sum("t"."volume")
+                SELECT coalesce(sum("t"."volume"),0)
                 FROM "transaction" "t"
                 WHERE "t"."collection_address" = "c"."address"
                 AND "t"."date" > NOW() - INTERVAL '1 day'
             ) "volume_of_24h",
             (
-                SELECT sum("t"."volume")
+                SELECT coalesce(sum("t"."volume"),0)
                 FROM "transaction" "t"
                 WHERE "t"."collection_address" = "c"."address"
                 AND "t"."date" > NOW() - INTERVAL '7 days'
             ) "volume_of_7d"
         FROM "collection" "c"
-        LEFT JOIN "listing_nft" "l" ON "l"."collection_address" = "c"."address"
+        LEFT JOIN "nft" "n" ON "n"."token_address" = "c"."address"
+        LEFT JOIN "listing_nft" "l" ON "l"."nft_id" = "n"."id"
         GROUP BY "c"."address"
     `;
   }

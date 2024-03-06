@@ -1,31 +1,53 @@
 import { Injectable } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 
-import { readConfigOrThrow } from "@root/shared/helper/read-config";
-import { getOwnedNftsByAddress } from "@root/shared/services/http/get-owned-nfts-by-address";
+import { CollectionRepository } from "@root/shared/repositories/collection.repository";
+import { NftRepository } from "@root/shared/repositories/nft.repository";
+
+import type { GetCollectionsByOwnerParams } from "./parsers/get-collections-by-owner";
+import type { GetNftsByOwnerQuery } from "./parsers/get-nfts-by-owner";
 
 @Injectable()
 export class UserService {
-  constructor(private configService: ConfigService) {}
+  constructor(
+    private nftRepository: NftRepository,
+    private collectionRepository: CollectionRepository
+  ) {}
 
-  public async getOwnedNft(ownedAddress: string, collectionAddress?: string) {
-    const palletApiUrl = readConfigOrThrow("PALLET_API_URL")(
-      this.configService
+  public async getOwnedNfts(ownedAddress: string, query: GetNftsByOwnerQuery) {
+    const { nfts, total } = await this.nftRepository.findPagedNftsByOwner(
+      ownedAddress,
+      query
     );
-
-    let nfts = await getOwnedNftsByAddress(palletApiUrl, ownedAddress).then(
-      response => response.nfts
-    );
-
-    if (collectionAddress) {
-      nfts = nfts.filter(
-        nft => nft.collection.contract_address === collectionAddress
-      );
-    }
 
     return {
-      address: ownedAddress,
-      nfts
+      data: nfts,
+      total,
+      page: query.page,
+      take: query.take
+    };
+  }
+
+  public getListedNftsBySellerAddress(sellerAddress: string) {
+    return this.nftRepository.findListingsBySellerAddress(sellerAddress);
+  }
+
+  public async getCollectionsByOwner(
+    ownerAddress: string,
+    query: GetCollectionsByOwnerParams
+  ) {
+    const { collections, total } =
+      await this.collectionRepository.findPagedCollectionViews({
+        page: query.page,
+        take: query.take,
+        ownerAddress,
+        search: query.search
+      });
+
+    return {
+      data: collections,
+      total,
+      page: query.page,
+      take: query.take
     };
   }
 }

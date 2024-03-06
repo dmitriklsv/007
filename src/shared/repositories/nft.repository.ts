@@ -5,8 +5,10 @@ import type {
   Prisma,
   SaleType
 } from "@prisma/client";
+import type { DateTime } from "luxon";
 
 import { PrismaService } from "@root/libs/prisma/prisma.service";
+import type { GetNftsByOwnerQuery } from "@root/modules/user/parsers/get-nfts-by-owner";
 
 import type { NftAttribute } from "../services/http/get-nft-metadata";
 
@@ -18,14 +20,15 @@ type FindNftByTokenAddressAndTokenId = {
 
 type CreateNftParams = {
   tokenId: string;
-  name: string;
-  image: string;
   tokenUri: string;
-  traits: Array<NftAttribute>;
   collection: {
     address: string;
   };
+  name?: string;
+  image?: string;
+  traits?: Array<NftAttribute>;
   description?: string;
+  ownerAddress?: string;
 };
 
 type CreateNftListingParam = {
@@ -36,8 +39,9 @@ type CreateNftListingParam = {
   sellerAddress: string;
   saleType: SaleType;
   collectionAddress: string;
-  startDate?: Date;
-  endDate?: Date;
+  createdDate: DateTime;
+  startDate?: DateTime;
+  endDate?: DateTime;
   minBidIncrementPercent?: number;
 };
 
@@ -47,8 +51,9 @@ type CreateNftOffer = {
   buyerAddress: string;
   price: number;
   denom: string;
-  startDate: Date;
-  endDate: Date;
+  startDate: DateTime;
+  endDate: DateTime;
+  createdDate: DateTime;
 };
 
 type CreateNftActivityParam = {
@@ -58,6 +63,7 @@ type CreateNftActivityParam = {
   eventKind: NftActivityKind;
   metadata: Prisma.InputJsonValue;
   nftId: number;
+  createdDate: DateTime;
   sellerAddress?: string;
   buyerAddress?: string;
 };
@@ -67,12 +73,19 @@ type CreateNftBiddingParams = {
   buyerAddress: string;
   price: number;
   txHash: string;
+  createdDate: DateTime;
 };
 
 type UpdateNftListingParams = {
   listing: ListingNft;
   price?: number;
   minBidIncrementPercent?: number;
+};
+
+type UpdateOwnerParams = {
+  tokenAddress: string;
+  tokenId: string;
+  ownerAddress: string;
 };
 
 @Injectable()
@@ -101,10 +114,11 @@ export class NftRepository {
     collection,
     image,
     name,
-    traits,
+    traits = [],
     description,
     tokenId,
-    tokenUri
+    tokenUri,
+    ownerAddress
   }: CreateNftParams) {
     return this.prisma.nft.create({
       data: {
@@ -113,11 +127,12 @@ export class NftRepository {
         token_uri: tokenUri,
         description,
         image,
+        owner_address: ownerAddress,
         Traits: {
           createMany: {
-            data: traits?.map(({ trait_type, value, display_type, type }) => ({
+            data: traits.map(({ trait_type, value, display_type, type }) => ({
               attribute: trait_type || type || "unknown",
-              value: value.toString(),
+              value: value?.toString() || "unknown",
               display_type
             }))
           }
@@ -141,15 +156,17 @@ export class NftRepository {
     sellerAddress,
     startDate,
     txHash,
-    collectionAddress
+    collectionAddress,
+    createdDate
   }: CreateNftListingParam) {
     return this.prisma.listingNft.create({
       data: {
         denom,
         sale_type: saleType,
         tx_hash: txHash,
-        end_date: endDate,
-        start_date: startDate,
+        created_date: createdDate.toJSDate(),
+        end_date: endDate?.toJSDate(),
+        start_date: startDate?.toJSDate(),
         min_bid_increment_percent: minBidIncrementPercent,
         price,
         collection_address: collectionAddress,
@@ -179,29 +196,27 @@ export class NftRepository {
     price,
     startDate,
     txHash,
-    denom
+    denom,
+    createdDate
   }: CreateNftOffer) {
     return this.prisma.nftOffer.create({
       data: {
         tx_hash: txHash,
         nft_id: nftId,
-        end_date: endDate,
+        end_date: endDate.toJSDate(),
         price,
         denom,
-        start_date: startDate,
+        start_date: startDate.toJSDate(),
+        created_date: createdDate.toJSDate(),
         buyer_address: buyerAddress
       }
     });
   }
 
-  public deleteNftOffer(nftId: number, buyerAddress: string) {
+  public deleteNftOffer(id: number) {
     return this.prisma.nftOffer.delete({
       where: {
-        nft_id_buyer_address: {
-          nft_id: nftId,
-          buyer_address: buyerAddress
-        },
-        status: "pending"
+        id
       }
     });
   }
@@ -214,44 +229,66 @@ export class NftRepository {
     nftId,
     txHash,
     sellerAddress,
-    buyerAddress
+    buyerAddress,
+    createdDate
   }: CreateNftActivityParam) {
     return this.prisma.nftActivity.create({
       data: {
-        nft_id: nftId,
         denom,
         event_kind: eventKind,
         seller_address: sellerAddress,
         metadata,
         price,
         tx_hash: txHash,
-        buyer_address: buyerAddress
+        buyer_address: buyerAddress,
+        date: createdDate.toJSDate(),
+        Nft: {
+          connect: {
+            id: nftId
+          }
+        }
       }
     });
   }
 
-  public findNftOfferByBuyerAddressAndNftId(
-    buyerAddress: string,
-    nftId: number
+  public async findHighestNftOfferExcludeSelfOffer(
+    nftId: number,
+    excludeBuyer: string
   ) {
-    return this.prisma.nftOffer.findUnique({
+    const highestOffer = await this.prisma.nftOffer.findMany({
       where: {
-        nft_id_buyer_address: {
-          buyer_address: buyerAddress,
-          nft_id: nftId
-        },
-        status: "pending"
-      }
+        nft_id: nftId,
+        buyer_address: {
+          not: excludeBuyer
+        }
+      },
+      orderBy: {
+        price: "desc"
+      },
+      take: 1
     });
+
+    if (!highestOffer.length) {
+      return undefined;
+    }
+
+    return highestOffer[0];
   }
 
-  public completeNftOfferByTxHash(txHash: string) {
-    return this.prisma.nftOffer.update({
+  public findNftOfferByTokenAddressTokenIdBuyerAndPrice(
+    tokenAddress: string,
+    tokenId: string,
+    buyer: string,
+    price: number
+  ) {
+    return this.prisma.nftOffer.findFirst({
       where: {
-        tx_hash: txHash
-      },
-      data: {
-        status: "done"
+        Nft: {
+          token_address: tokenAddress,
+          token_id: tokenId
+        },
+        buyer_address: buyer,
+        price
       }
     });
   }
@@ -260,7 +297,8 @@ export class NftRepository {
     buyerAddress,
     listing,
     price,
-    txHash
+    txHash,
+    createdDate
   }: CreateNftBiddingParams) {
     return this.prisma.nftBidding.create({
       data: {
@@ -268,7 +306,8 @@ export class NftRepository {
         denom: listing.denom,
         price,
         tx_hash: txHash,
-        listing_hash: listing.tx_hash
+        listing_id: listing.id,
+        created_date: createdDate.toJSDate()
       }
     });
   }
@@ -277,7 +316,7 @@ export class NftRepository {
     return this.prisma.nftBidding.deleteMany({
       where: {
         buyer_address: buyerAddress,
-        listing_hash: listing.tx_hash
+        listing_id: listing.id
       }
     });
   }
@@ -289,7 +328,7 @@ export class NftRepository {
   }: UpdateNftListingParams) {
     return this.prisma.listingNft.update({
       where: {
-        tx_hash: listing.tx_hash
+        id: listing.id
       },
       data: {
         min_bid_increment_percent: minBidIncrementPercent,
@@ -301,8 +340,117 @@ export class NftRepository {
   public deleteListing(listing: ListingNft) {
     return this.prisma.listingNft.delete({
       where: {
-        tx_hash: listing.tx_hash
+        id: listing.id
       }
     });
+  }
+
+  public findListingsBySellerAddress(sellerAddress: string) {
+    return this.prisma.listingNft.findMany({
+      where: {
+        seller_address: sellerAddress
+      },
+      include: {
+        Nft: true
+      }
+    });
+  }
+
+  public updateOwner({
+    ownerAddress,
+    tokenAddress,
+    tokenId
+  }: UpdateOwnerParams) {
+    return this.prisma.nft.update({
+      data: {
+        owner_address: ownerAddress
+      },
+      where: {
+        token_address_token_id: {
+          token_address: tokenAddress,
+          token_id: tokenId
+        }
+      }
+    });
+  }
+
+  public async findPagedNftsByOwner(
+    ownerAddress: string,
+    {
+      page,
+      sortByPrice,
+      status,
+      take,
+      search,
+      collectionAddress
+    }: GetNftsByOwnerQuery
+  ) {
+    const filter: Prisma.NftWhereInput = {};
+
+    if (collectionAddress) {
+      filter.token_address = collectionAddress;
+    }
+
+    if (search) {
+      filter.AND = {
+        OR: [
+          {
+            name: {
+              contains: search,
+              mode: "insensitive"
+            }
+          },
+          {
+            token_id: {
+              contains: search,
+              mode: "insensitive"
+            }
+          }
+        ]
+      };
+    }
+
+    if (status === "all") {
+      filter.OR = [
+        { owner_address: ownerAddress },
+        {
+          Listing: {
+            seller_address: ownerAddress
+          }
+        }
+      ];
+    } else if (status === "listed") {
+      filter.Listing = {
+        seller_address: ownerAddress
+      };
+    } else {
+      filter.owner_address = ownerAddress;
+    }
+
+    const [nfts, total] = await Promise.all([
+      this.prisma.nft.findMany({
+        where: filter,
+        include: {
+          Listing: true,
+          Collection: {
+            select: {
+              royalty: true
+            }
+          }
+        },
+        take,
+        skip: (page - 1) * take,
+        orderBy: {
+          Listing: {
+            price: sortByPrice
+          }
+        }
+      }),
+      this.prisma.nft.count({
+        where: filter
+      })
+    ]);
+
+    return { nfts, total };
   }
 }

@@ -1,7 +1,10 @@
 import { Injectable } from "@nestjs/common";
+import type { CollectionOffer } from "@prisma/client";
+import type { DateTime } from "luxon";
 
 import { PrismaService } from "@root/libs/prisma/prisma.service";
-import type { GetCollectionOffersQuery } from "@root/modules/collection/parsers/get-collection-offers.parser";
+import type { GetCollectionOffersQuery } from "@root/modules/collection/parsers/get-collection-offers";
+import type { GetListedNftsByCollectionQuery } from "@root/modules/collection/parsers/get-listed-nfts-by-collection";
 
 type CreateCollectionParams = {
   address: string;
@@ -16,9 +19,17 @@ type CreateCollectionOffer = {
   price: number;
   denom: string;
   quantity: number;
-  startDate: Date;
-  endDate: Date;
+  startDate: DateTime;
+  endDate: DateTime;
   txHash: string;
+  createdDate: DateTime;
+};
+
+type FindPagedCollectionViewsParams = {
+  take: number;
+  page: number;
+  ownerAddress?: string;
+  search?: string;
 };
 
 @Injectable()
@@ -49,6 +60,14 @@ export class CollectionRepository {
     });
   }
 
+  public findAllCollectionAddress() {
+    return this.prisma.collection.findMany({
+      select: {
+        address: true
+      }
+    });
+  }
+
   public createCollectionOffer({
     address,
     buyerAddress,
@@ -57,17 +76,19 @@ export class CollectionRepository {
     quantity,
     startDate,
     txHash,
-    denom
+    denom,
+    createdDate
   }: CreateCollectionOffer) {
     return this.prisma.collectionOffer.create({
       data: {
         tx_hash: txHash,
         collection_address: address,
-        end_date: endDate,
+        end_date: endDate.toJSDate(),
         price,
         quantity,
         denom,
-        start_date: startDate,
+        start_date: startDate.toJSDate(),
+        created_date: createdDate.toJSDate(),
         Buyer: {
           connectOrCreate: {
             create: {
@@ -82,14 +103,16 @@ export class CollectionRepository {
     });
   }
 
-  public deleteCollectionOffer(address: string, buyerAddress: string) {
-    return this.prisma.collectionOffer.delete({
+  public deleteCollectionOfferByCollectionAddressBuyerAndPrice(
+    collectionAddress: string,
+    buyerAddress: string,
+    price: number
+  ) {
+    return this.prisma.collectionOffer.deleteMany({
       where: {
-        collection_address_buyer_address: {
-          collection_address: address,
-          buyer_address: buyerAddress
-        },
-        status: "pending"
+        collection_address: collectionAddress,
+        buyer_address: buyerAddress,
+        price
       }
     });
   }
@@ -102,8 +125,7 @@ export class CollectionRepository {
       this.prisma.collectionOffer.findMany({
         where: {
           collection_address: collectionAddress,
-          buyer_address: walletAddress,
-          status: "pending"
+          buyer_address: walletAddress
         },
         take,
         skip: (page - 1) * take
@@ -119,51 +141,33 @@ export class CollectionRepository {
     return { nodes, total };
   }
 
-  public findHighestCollectionOffer(
+  public async findHighestCollectionOfferExcludeSelfOffer(
     collectionAddress: string,
-    buyerAddress: string
+    excludeBuyer: string
   ) {
-    return this.prisma.collectionOffer.findMany({
+    const highestOffer = await this.prisma.collectionOffer.findMany({
       where: {
         collection_address: collectionAddress,
         buyer_address: {
-          not: buyerAddress // exclude their owned offers
-        },
-        status: "pending"
+          not: excludeBuyer // exclude their owned offers
+        }
       },
       orderBy: {
         price: "desc"
       },
       take: 1
     });
+
+    if (!highestOffer.length) {
+      return undefined;
+    }
+    return highestOffer[0];
   }
 
-  public findCollectionOfferByBuyerAddressAndCollectionAddress(
-    buyerAddress: string,
-    collectionAddress: string
-  ) {
-    return this.prisma.collectionOffer.findUnique({
-      where: {
-        collection_address_buyer_address: {
-          buyer_address: buyerAddress,
-          collection_address: collectionAddress
-        },
-        status: "pending"
-      }
-    });
-  }
-
-  public updateCollectionOfferProcess(
-    buyerAddress: string,
-    collectionAddress: string
-  ) {
+  public updateCollectionOfferProcess(collectionOffer: CollectionOffer) {
     return this.prisma.collectionOffer.update({
       where: {
-        collection_address_buyer_address: {
-          collection_address: collectionAddress,
-          buyer_address: buyerAddress
-        },
-        status: "pending"
+        id: collectionOffer.id
       },
       data: {
         current_quantity: {
@@ -173,20 +177,119 @@ export class CollectionRepository {
     });
   }
 
-  public completeCollectionOffer(
-    buyerAddress: string,
-    collectionAddress: string
+  public async findPagedListedNftsByCollectionAddress(
+    collectionAddress: string,
+    { page, take, sortByPrice }: GetListedNftsByCollectionQuery
   ) {
-    return this.prisma.collectionOffer.update({
+    const [listings, total] = await Promise.all([
+      this.prisma.listingNft.findMany({
+        where: {
+          Nft: {
+            token_address: collectionAddress
+          }
+        },
+        include: {
+          Nft: true
+        },
+        take,
+        skip: (page - 1) * take,
+        orderBy: [
+          {
+            price: sortByPrice
+          },
+          {
+            start_date: "desc"
+          }
+        ]
+      }),
+      this.prisma.listingNft.count({
+        where: {
+          Nft: {
+            token_address: collectionAddress
+          }
+        }
+      })
+    ]);
+
+    return { listings, total };
+  }
+
+  public findCollectionsByOwner(walletAddress: string) {
+    return this.prisma.collection.findMany({
       where: {
-        collection_address_buyer_address: {
-          collection_address: collectionAddress,
-          buyer_address: buyerAddress
+        Nfts: {
+          some: {
+            owner_address: walletAddress
+          }
         }
       },
-      data: {
-        status: "done"
+      select: {
+        address: true
       }
     });
+  }
+
+  public async findPagedCollectionViews({
+    page,
+    take,
+    ownerAddress,
+    search
+  }: FindPagedCollectionViewsParams) {
+    let addresses: Array<string> | undefined;
+
+    if (ownerAddress) {
+      addresses = await this.prisma.collection
+        .findMany({
+          where: {
+            Nfts: {
+              some: {
+                OR: [
+                  { owner_address: ownerAddress },
+                  {
+                    Listing: {
+                      seller_address: ownerAddress
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          select: {
+            address: true
+          }
+        })
+        .then(collections => collections.map(({ address }) => address));
+    }
+
+    console.log("addresses: ", addresses);
+
+    const [collections, total] = await Promise.all([
+      this.prisma.collectionView.findMany({
+        where: {
+          name: {
+            contains: search,
+            mode: "insensitive"
+          },
+          address: {
+            in: addresses
+          }
+        },
+        take,
+        skip: (page - 1) * take
+      }),
+      this.prisma.collection.count({
+        where: {
+          name: {
+            contains: search,
+            mode: "insensitive"
+          },
+          address: {
+            in: addresses
+          }
+        }
+      })
+    ]);
+
+    return { collections, total };
   }
 }

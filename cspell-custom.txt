@@ -1,2 +1,10 @@
 MRKT
 cosm
+duation
+usei
+Millis
+denoms
+apikey
+cosmwasm
+stargate
+tendermint

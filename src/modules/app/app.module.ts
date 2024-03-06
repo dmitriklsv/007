@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
-import { ConfigModule } from "@nestjs/config";
+
+import { SecretModule } from "@root/libs/secret/secret.module";
 
 import { PrismaModule } from "../../libs/prisma/prisma.module";
 import { CollectionModule } from "../collection/collection.module";
@@ -10,10 +11,7 @@ import { AppService } from "./app.service";
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      envFilePath: `./config/.${process.env.APP || "local"}.env`,
-      isGlobal: true
-    }),
+    SecretModule,
     CollectionModule,
     NftModule,
     PrismaModule,

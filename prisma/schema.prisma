@@ -23,6 +23,7 @@ model Collection {
   address      String        @id @db.VarChar
   name         String        @db.VarChar
   symbol       String        @db.VarChar
+  royalty      Decimal?      
   image        String?       @db.VarChar
   banner       String?       @db.VarChar
   description  String?       @db.VarChar
@@ -36,8 +37,9 @@ model Nft {
   id            Int           @id @default(autoincrement())
   token_address String        @db.VarChar
   token_id      String        @db.VarChar
-  name          String        @db.VarChar
+  name          String?       @db.VarChar
   token_uri     String        @db.VarChar
+  owner_address String?       @db.VarChar
   image         String?       @db.VarChar
   description   String?       @db.VarChar
   Collection    Collection    @relation(fields: [token_address], references: [address])
@@ -51,8 +53,9 @@ model Nft {
 }
 
 model ListingNft {
-  tx_hash                   String       @id @db.VarChar
-  created_date              DateTime     @default(now()) @db.Timestamptz(3)
+  id                        Int          @id @default(autoincrement())
+  tx_hash                   String       @db.VarChar
+  created_date              DateTime     @db.Timestamptz(3)
   nft_id                    Int          @unique
   collection_address        String       @db.VarChar
   sale_type                 SaleType
@@ -70,10 +73,11 @@ model ListingNft {
 }
 
 model NftActivity {
-  tx_hash        String          @id @db.VarChar
+  id             Int             @id @default(autoincrement())
+  tx_hash        String          @db.VarChar
   seller_address String?         @db.VarChar
   buyer_address  String?         @db.VarChar
-  date           DateTime        @default(now()) @db.Timestamptz(3)
+  date           DateTime        @db.Timestamptz(3)
   price          Decimal
   denom          String          @db.VarChar
   event_kind     NftActivityKind
@@ -96,54 +100,54 @@ model NftTrait {
 }
 
 model CollectionOffer {
-  tx_hash            String      @id @db.VarChar
-  created_date       DateTime    @default(now()) @db.Timestamptz(3)
-  buyer_address      String      @db.VarChar
-  collection_address String      @db.VarChar
+  id                 Int      @id @default(autoincrement())
+  tx_hash            String   @db.VarChar
+  created_date       DateTime @db.Timestamptz(3)
+  buyer_address      String   @db.VarChar
+  collection_address String   @db.VarChar
   price              Decimal
-  denom              String      @default("usei")
+  denom              String   @default("usei")
   quantity           Int
-  current_quantity   Int         @default(0)
-  start_date         DateTime    @db.Timestamptz(3)
-  end_date           DateTime    @db.Timestamptz(3)
-  status             OfferStatus @default(pending)
-  Buyer              User        @relation(fields: [buyer_address], references: [address])
+  current_quantity   Int      @default(0)
+  start_date         DateTime @db.Timestamptz(3)
+  end_date           DateTime @db.Timestamptz(3)
+  Buyer              User     @relation(fields: [buyer_address], references: [address])
 
-  @@unique([collection_address, buyer_address])
   @@map("collection_offer")
 }
 
 model NftOffer {
-  tx_hash       String      @id @db.VarChar
-  created_date  DateTime    @default(now()) @db.Timestamptz(3)
+  id            Int      @id @default(autoincrement())
+  tx_hash       String   @db.VarChar
+  created_date  DateTime @db.Timestamptz(3)
   nft_id        Int
   price         Decimal
-  denom         String      @default("usei")
-  buyer_address String      @db.VarChar
-  start_date    DateTime    @db.Timestamptz(3)
-  end_date      DateTime    @db.Timestamptz(3)
-  status        OfferStatus @default(pending)
-  Nft           Nft         @relation(fields: [nft_id], references: [id])
+  denom         String   @default("usei")
+  buyer_address String   @db.VarChar
+  start_date    DateTime @db.Timestamptz(3)
+  end_date      DateTime @db.Timestamptz(3)
+  Nft           Nft      @relation(fields: [nft_id], references: [id])
 
-  @@unique([nft_id, buyer_address])
   @@map("nft_offer")
 }
 
 model NftBidding {
-  tx_hash       String     @id @db.VarChar
-  listing_hash  String     @db.VarChar
-  created_date  DateTime   @default(now()) @db.Timestamptz(3)
+  id            Int        @id @default(autoincrement())
+  listing_id    Int
+  tx_hash       String     @db.VarChar
+  created_date  DateTime   @db.Timestamptz(3)
   buyer_address String     @db.VarChar
   price         Decimal
   denom         String     @db.VarChar
-  Listing       ListingNft @relation(fields: [listing_hash], references: [tx_hash])
+  Listing       ListingNft @relation(fields: [listing_id], references: [id], onDelete: Cascade)
 
   @@map("nft_bidding")
 }
 
 //repersentthe transfering transactions (fixed_sell, accept_sale, accept_offer, bidding)
 model Transaction {
-  txn_hash           String     @id @db.VarChar
+  id                 Int        @id @default(autoincrement())
+  txn_hash           String     @db.VarChar
   date               DateTime   @db.Timestamptz(3)
   volume             Decimal
   collection_address String     @db.VarChar
@@ -156,25 +160,46 @@ model Transaction {
   @@map("transaction")
 }
 
-model Block {
-  txn_hash String   @id @db.VarChar
-  date     DateTime @db.Timestamptz(3)
-  height   String   @db.VarChar
-  sender   String   @db.VarChar
-  action   String   @db.VarChar
+model StreamTx {
+  id         Int      @id @default(autoincrement())
+  date       DateTime @default(now()) @db.Timestamptz(3)
+  tx_hash    String   @db.VarChar
+  action     String   @db.VarChar(26)
+  is_failure Boolean  @default(false)
+  event      Json
+  message    String?  @db.VarChar
 
-  @@map("block")
+  @@map("stream_tx")
+}
+
+model Cwr721FailureTx {
+  id      Int      @id @default(autoincrement())
+  date    DateTime @default(now()) @db.Timestamptz(3)
+  action  String   @db.VarChar(26)
+  tx_hash String   @db.VarChar
+  event   Json
+  message String   @db.VarChar
+
+  @@map("cwr721_failure_tx")
+}
+
+model Config {
+  key   String @id @db.VarChar
+  value String @db.VarChar
+
+  @@map("config")
 }
 
 view CollectionView {
   address       String  @id
   name          String
-  slug          String
   symbol        String
-  image         String
+  royalty       Decimal?
+  image         String?
   banner        String?
   description   String?
   supply        Int
+  listed        Int
   volume        Decimal
   floor_price   Decimal
   volume_of_1h  Decimal
@@ -200,11 +225,4 @@ enum SaleType {
   auction
 
   @@map("sale_type")
-}
-
-enum OfferStatus {
-  pending
-  done
-
-  @@map("offer_status")
 }

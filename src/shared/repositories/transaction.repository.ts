@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { DateTime } from "luxon";
+import type { DateTime } from "luxon";
 
 import { PrismaService } from "@root/libs/prisma/prisma.service";
 
@@ -9,6 +9,7 @@ type CreateTransactionParams = {
   collection_address: string;
   buyerAddress: string;
   sellerAddress: string;
+  createdDate: DateTime;
 };
 
 @Injectable()
@@ -20,11 +21,12 @@ export class TransactionRepository {
     volume,
     collection_address,
     buyerAddress,
-    sellerAddress
+    sellerAddress,
+    createdDate
   }: CreateTransactionParams) {
     return this.prisma.transaction.create({
       data: {
-        date: DateTime.now().toJSDate(),
+        date: createdDate.toJSDate(),
         txn_hash: txHash,
         volume,
         buyer_address: buyerAddress,
